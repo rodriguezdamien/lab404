@@ -1,0 +1,59 @@
+apiVersion: policies.kyverno.io/v1
+kind: NamespacedValidatingPolicy
+metadata:
+  name: require-image-digest
+  namespace: lab404
+spec:
+  validationActions:
+    - Deny
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  variables:
+    - name: images
+      expression: >-
+        object.spec.containers.map(c, c.image)
+        + object.spec.?initContainers.orValue([]).map(c, c.image)
+        + object.spec.?ephemeralContainers.orValue([]).map(c, c.image)
+    - name: unpinned
+      expression: variables.images.filter(image, !parseImageReference(image).containsDigest())
+  validations:
+    - expression: size(variables.unpinned) == 0
+      messageExpression: >-
+        'Images must be pinned by digest (name@sha256:...). Not pinned: ' +
+        variables.unpinned.join(', ')
+---
+# Ephemeral containers are added through the pods/ephemeralcontainers
+# subresource, which Kyverno cannot scan in the background.
+apiVersion: policies.kyverno.io/v1
+kind: NamespacedValidatingPolicy
+metadata:
+  name: require-image-digest-ephemeral
+  namespace: lab404
+spec:
+  validationActions:
+    - Deny
+  failurePolicy: Fail
+  evaluation:
+    background:
+      enabled: false
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["UPDATE"]
+        resources: ["pods/ephemeralcontainers"]
+  variables:
+    - name: unpinned
+      expression: >-
+        object.spec.ephemeralContainers.map(c, c.image)
+        .filter(image, !parseImageReference(image).containsDigest())
+  validations:
+    - expression: size(variables.unpinned) == 0
+      messageExpression: >-
+        'Ephemeral container images must be pinned by digest (name@sha256:...). Not pinned: ' +
+        variables.unpinned.join(', ')

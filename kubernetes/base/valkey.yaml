@@ -38,7 +38,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: valkey
-          image: valkey/valkey:8.1-alpine
+          image: valkey/valkey:8.1.11-alpine
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args: ['exec valkey-server --requirepass "$VALKEY_PASSWORD"']

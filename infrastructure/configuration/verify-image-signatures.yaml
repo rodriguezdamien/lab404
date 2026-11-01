@@ -1,0 +1,104 @@
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: verify-image-signatures
+spec:
+  validationActions:
+    - Deny
+  failurePolicy: Fail
+  webhookConfiguration:
+    timeoutSeconds: 15
+  validationConfigurations:
+    mutateDigest: false
+    required: true
+    verifyDigest: true
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: lab404
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  matchImageReferences:
+    - glob: ghcr.io/rodriguezdamien/lab404-web:*
+    - glob: ghcr.io/rodriguezdamien/lab404-web@*
+    - glob: ghcr.io/rodriguezdamien/lab404-votes:*
+    - glob: ghcr.io/rodriguezdamien/lab404-votes@*
+  images:
+    - name: containers
+      expression: object.spec.containers.map(c, c.image)
+    - name: initContainers
+      expression: >-
+        has(object.spec.initContainers) ?
+        object.spec.initContainers.map(c, c.image) : []
+    - name: ephemeralContainers
+      expression: >-
+        has(object.spec.ephemeralContainers) ?
+        object.spec.ephemeralContainers.map(c, c.image) : []
+  attestors:
+    - name: workflow
+      cosign:
+        keyless:
+          identities:
+            - issuer: https://token.actions.githubusercontent.com
+              subject: https://github.com/rodriguezdamien/lab404/.github/workflows/images.yml@refs/heads/main
+  validations:
+    - expression: >-
+        (images.containers + images.initContainers + images.ephemeralContainers)
+        .map(image, verifyImageSignatures(image, [attestors.workflow]))
+        .all(count, count > 0)
+      message: >-
+        lab404-web and lab404-votes images must be signed by the images.yml
+        workflow on main.
+---
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: verify-image-signatures-ephemeral
+spec:
+  validationActions:
+    - Deny
+  failurePolicy: Fail
+  webhookConfiguration:
+    timeoutSeconds: 15
+  validationConfigurations:
+    mutateDigest: false
+    required: true
+    verifyDigest: true
+  evaluation:
+    background:
+      enabled: false
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: lab404
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["UPDATE"]
+        resources: ["pods/ephemeralcontainers"]
+  matchImageReferences:
+    - glob: ghcr.io/rodriguezdamien/lab404-web:*
+    - glob: ghcr.io/rodriguezdamien/lab404-web@*
+    - glob: ghcr.io/rodriguezdamien/lab404-votes:*
+    - glob: ghcr.io/rodriguezdamien/lab404-votes@*
+  images:
+    - name: ephemeralContainers
+      expression: object.spec.ephemeralContainers.map(c, c.image)
+  attestors:
+    - name: workflow
+      cosign:
+        keyless:
+          identities:
+            - issuer: https://token.actions.githubusercontent.com
+              subject: https://github.com/rodriguezdamien/lab404/.github/workflows/images.yml@refs/heads/main
+  validations:
+    - expression: >-
+        images.ephemeralContainers
+        .map(image, verifyImageSignatures(image, [attestors.workflow]))
+        .all(count, count > 0)
+      message: >-
+        lab404-web and lab404-votes images must be signed by the images.yml
+        workflow on main.
