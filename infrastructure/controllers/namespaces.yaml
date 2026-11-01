@@ -29,3 +29,16 @@ metadata:
     pod-security.kubernetes.io/audit-version: v1.35
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/warn-version: v1.35
+---
+# Falco reads host paths and needs extra capabilities, which only the privileged profile allows.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: falco
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: v1.35
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/audit-version: v1.35
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/warn-version: v1.35

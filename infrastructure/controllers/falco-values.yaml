@@ -1,0 +1,68 @@
+# The chart builds the image as registry/repository:tag, so the digest goes in the tag.
+image:
+  tag: 0.45.0@sha256:788f1129c542171813083d4afc61b16730a47dde8c23d9c39370acef996349b6
+
+# modern_ebpf is embedded in Falco: no kernel module or driver build is needed.
+# leastPrivileged replaces `privileged: true` with BPF, SYS_RESOURCE, PERFMON and SYS_PTRACE.
+driver:
+  kind: modern_ebpf
+  modernEbpf:
+    leastPrivileged: true
+
+# Rules and the container plugin come from the image, so they are fixed by the
+# image digest. falcoctl would otherwise download the latest rules at runtime.
+falcoctl:
+  artifact:
+    install:
+      enabled: false
+    follow:
+      enabled: false
+
+# kind nodes run containerd only.
+collectors:
+  containerEngine:
+    engines:
+      docker:
+        enabled: false
+      podman:
+        enabled: false
+      containerd:
+        enabled: false
+      cri:
+        enabled: true
+        sockets: ["/run/containerd/containerd.sock"]
+      lxc:
+        enabled: false
+      libvirt_lxc:
+        enabled: false
+      bpm:
+        enabled: false
+
+falco:
+  watch_config_files: true
+  json_output: true
+  json_include_output_property: true
+  stdout_output:
+    enabled: true
+  syslog_output:
+    enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Helm replaces the chart's list, so the control-plane tolerations are repeated.
+# The last entry is the exact taint of lab404-worker2, where Valkey runs.
+tolerations:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/control-plane
+  - effect: NoSchedule
+    key: workload
+    operator: Equal
+    value: stateful
