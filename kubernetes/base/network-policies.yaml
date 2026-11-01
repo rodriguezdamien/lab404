@@ -1,0 +1,196 @@
+# Step 1: nothing is allowed unless a later policy says so.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: lab404
+  labels:
+    app.kubernetes.io/part-of: lab404
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Step 2: every pod in the namespace may resolve names through CoreDNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: lab404
+  labels:
+    app.kubernetes.io/part-of: lab404
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Step 3: only the Envoy proxy of the lab404 Gateway reaches web, on 8080.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-ingress-from-envoy
+  namespace: lab404
+  labels:
+    app.kubernetes.io/part-of: lab404
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: envoy
+              gateway.envoyproxy.io/owning-gateway-name: lab404
+              gateway.envoyproxy.io/owning-gateway-namespace: lab404
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# Step 4: web reaches votes on 8081 and the Collector on 4318.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-egress
+  namespace: lab404
+  labels:
+    app.kubernetes.io/part-of: lab404
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: votes
+      ports:
+        - protocol: TCP
+          port: 8081
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: otel-collector
+      ports:
+        - protocol: TCP
+          port: 4318
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: votes-ingress-from-web
+  namespace: lab404
+  labels:
+    app.kubernetes.io/part-of: lab404
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: votes
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: web
+      ports:
+        - protocol: TCP
+          port: 8081
+---
+# Step 5: votes reaches valkey on 6379 and the Collector on 4318.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: votes-egress
+  namespace: lab404
+  labels:
+    app.kubernetes.io/part-of: lab404
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: votes
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: valkey
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: otel-collector
+      ports:
+        - protocol: TCP
+          port: 4318
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: valkey-ingress-from-votes
+  namespace: lab404
+  labels:
+    app.kubernetes.io/part-of: lab404
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: valkey
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: votes
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+# Step 7: Nginx stays reachable from anywhere (deferred exposure exercise).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nginx-ingress
+  namespace: lab404
+  labels:
+    app.kubernetes.io/part-of: lab404
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nginx
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080

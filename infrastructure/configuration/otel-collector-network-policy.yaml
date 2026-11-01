@@ -1,0 +1,27 @@
+# Step 6: only web and votes may send telemetry to the Collector, on 4318.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: collector-ingress
+  namespace: observability
+  labels:
+    app.kubernetes.io/part-of: lab404
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: otel-collector
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: lab404
+          podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: [web, votes]
+      ports:
+        - protocol: TCP
+          port: 4318
