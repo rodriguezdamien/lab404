@@ -18,11 +18,20 @@ spec:
         app.kubernetes.io/component: frontend
         app.kubernetes.io/part-of: lab404
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: web
           image: ghcr.io/leofvo/lab404-web:latest
           imagePullPolicy: Always
           env:
+            - name: GUNICORN_CMD_ARGS
+              value: --no-control-socket
             - name: VOTES_URL
               value: http://votes:8081
             - name: OTEL_SERVICE_NAME
@@ -38,6 +47,25 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
 ---
 apiVersion: v1
 kind: Service
